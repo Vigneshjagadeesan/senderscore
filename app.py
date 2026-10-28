@@ -1,68 +1,97 @@
 import streamlit as st
 import pandas as pd
-import asyncio
-from playwright.async_api import async_playwright
+import dns.resolver
+import dns.reversename
+import socket
 import time
 
-st.set_page_config(page_title="Bulk SenderScore Extractor", layout="wide")
-st.title("Bulk SenderScore Full Detail Extractor")
+st.set_page_config(page_title="Bulk SenderScore Checker", layout="wide", page_icon="✉️")
+st.title("Bulk SenderScore & IP Reputation Extractor")
+st.write("Sender Score, Hostname, matrum Reputation status-ai bulk-ah check pannunga.")
 
-async def scrape_ip_details(ip):
-    async with async_playwright() as p:
-        # Browser launch panrom
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        
-        url = f"https://senderscore.org/assess/check-your-score/?ip={ip.strip()}"
+def check_ip_details(ip):
+    ip = ip.strip()
+    if not ip:
+        return None
+    
+    # 1. Reverse DNS moolama Hostname kandupidikrom
+    hostname = "N/A"
+    try:
+        rev_name = dns.reversename.from_address(ip)
+        hostname = str(dns.resolver.resolve(rev_name, "PTR")[0]).rstrip('.')
+    except Exception:
         try:
-            await page.goto(url, timeout=30000)
-            await page.wait_for_timeout(4000) # Wait for widgets to load
-            
-            # Extract Score
-            score_elem = await page.query_selector("div.score, div[class*='score']")
-            score = await score_elem.inner_text() if score_elem else "N/A"
-            
-            # Extract Hostname
-            host_elem = await page.query_selector("text=Hostname >> xpath=..")
-            hostname = await host_elem.inner_text() if host_elem else "N/A"
-            hostname = hostname.replace("Hostname", "").strip()
-            
-            # Extract Volume
-            vol_elem = await page.query_selector("text=Volume >> xpath=..")
-            volume = await vol_elem.inner_text() if vol_elem else "N/A"
-            volume = volume.replace("Volume", "").strip()
-            
-            await browser.close()
-            return {
-                "IP": ip.strip(),
-                "Sender Score": score.strip(),
-                "Hostname": hostname,
-                "Volume": volume
-            }
-        except Exception as e:
-            await browser.close()
-            return {"IP": ip.strip(), "Sender Score": "Error", "Hostname": str(e), "Volume": "N/A"}
+            hostname = socket.gethostbyaddr(ip)[0]
+        except Exception:
+            hostname = "Unknown Host"
 
-# User Input
-ip_input = st.text_area("IPs-ai enter pannunga (One per line):", height=150)
+    # 2. Sender Score Database Query
+    score = "N/A"
+    status = "Unknown"
+    try:
+        reversed_ip = '.'.join(reversed(ip.split('.')))
+        query_host = f"{reversed_ip}.score.senderscore.com"
+        answers = dns.resolver.resolve(query_host, 'A')
+        for rdata in answers:
+            # Response address-oda last octet thaan exact Sender Score (0-100)
+            score_val = int(rdata.to_text().split('.')[-1])
+            score = str(score_val)
+            if score_val >= 80:
+                status = "GOOD"
+            elif score_val >= 70:
+                status = "AVERAGE"
+            else:
+                status = "POOR"
+    except dns.resolver.NXDOMAIN:
+        score = "Not Listed"
+        status = "Low Volume / No History"
+    except Exception as e:
+        score = "Lookup Error"
+        status = str(e)
 
-if st.button("Extract Bulk Details"):
+    # 3. Domain extraction from Hostname
+    domain = "N/A"
+    if hostname not in ["N/A", "Unknown Host"]:
+        parts = hostname.split('.')
+        if len(parts) >= 2:
+            domain = '.'.join(parts[-2:])
+
+    return {
+        "IP Address": ip,
+        "Sender Score": score,
+        "Reputation Status": status,
+        "Hostname": hostname,
+        "Root Domain": domain
+    }
+
+# Input Box
+ip_input = st.text_area(
+    "IPs-ai enter pannunga (One per line):",
+    value="134.128.99.186\n204.220.169.114",
+    height=150
+)
+
+if st.button("Check Scores"):
     ips = [line.strip() for line in ip_input.split("\n") if line.strip()]
     if ips:
         results = []
         progress_bar = st.progress(0)
         
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
         for idx, ip in enumerate(ips):
-            data = loop.run_until_complete(scrape_ip_details(ip))
-            results.append(data)
+            data = check_ip_details(ip)
+            if data:
+                results.append(data)
             progress_bar.progress((idx + 1) / len(ips))
-        
+            time.sleep(0.05)
+            
         res_df = pd.DataFrame(results)
-        st.subheader("Extracted Results")
+        st.subheader("Results")
         st.dataframe(res_df, use_container_width=True)
         
         csv_file = res_df.to_csv(index=False).encode('utf-8')
-        st.download_button("Download CSV", data=csv_file, file_name="senderscore_bulk.csv")
+        st.download_button(
+            label="📥 Download CSV",
+            data=csv_file,
+            file_name="bulk_senderscore_results.csv",
+            mime="text/csv"
+        )
