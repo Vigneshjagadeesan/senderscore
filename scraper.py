@@ -5,13 +5,12 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 
-# Check panna vendiya IPs
+# Check panna vendiya IPs inga kudunga
 ips_to_check = [
     "142.0.85.188",
     "134.128.99.186"
 ]
 
-# Headless Chrome Browser setup
 options = webdriver.ChromeOptions()
 options.add_argument("--headless=new")
 options.add_argument("--no-sandbox")
@@ -28,10 +27,9 @@ for ip in ips_to_check:
     url = f"https://senderscore.org/assess/get-your-score/report/?lookup={ip}&authenticated=true"
     driver.get(url)
     
-    # Page render aaga wait panrom
     time.sleep(6)
     
-    # Score extract panrom
+    # Sender Score extract
     score = "N/A"
     try:
         score_elem = driver.find_element(By.CSS_SELECTOR, "div.score, div[class*='score']")
@@ -39,7 +37,7 @@ for ip in ips_to_check:
     except Exception:
         pass
         
-    # Sending Domains extract panrom
+    # Sending Domains list extract
     domains_list = []
     try:
         domain_elements = driver.find_elements(By.XPATH, "//div[contains(text(), 'Sending Domains')]/following::div//a | //div[contains(text(), 'Sending Domains')]/following::div//span")
@@ -60,7 +58,7 @@ for ip in ips_to_check:
 
 driver.quit()
 
-# Output CSV
+# CSV save
 df = pd.DataFrame(results)
 df.to_csv("senderscore_bulk_results.csv", index=False)
-print("Success! File saved as senderscore_bulk_results.csv")
+print("Done! CSV generated successfully.")
