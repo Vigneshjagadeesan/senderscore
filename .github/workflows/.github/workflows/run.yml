@@ -1,25 +1,23 @@
-
 name: Bulk SenderScore Run
 
 on:
-  workflow_dispatch: # Button click panna run aagum
+  workflow_dispatch:
 
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install Google Chrome & Dependencies
+      - name: Install Dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y wget curl
+          python -m pip install --upgrade pip
           pip install selenium webdriver-manager pandas
 
       - name: Run Scraper Script
@@ -27,6 +25,7 @@ jobs:
 
       - name: Upload Output CSV
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: bulk-result-csv
           path: senderscore_bulk_results.csv
